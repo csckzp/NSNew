@@ -17,12 +17,6 @@ use num_traits::Num;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[cfg(not(target_family = "wasm"))]
-use crate::circom::reader::generate_witness_from_wasm;
-
-#[cfg(target_family = "wasm")]
-use crate::circom::wasm::generate_witness_from_wasm;
-
 pub mod circom;
 
 pub type F<G> = <G as Engine>::Scalar;
@@ -59,7 +53,6 @@ struct CircomInput {
     extra: HashMap<String, Value>,
 }
 
-#[cfg(not(target_family = "wasm"))]
 fn compute_witness<G1, G2>(
     current_public_input: Vec<String>,
     private_input: HashMap<String, Value>,
@@ -80,79 +73,20 @@ where
         extra: private_input.clone(),
     };
 
-    let is_wasm = match &witness_generator_file {
-        FileLocation::PathBuf(path) => path.extension().unwrap_or_default() == "wasm",
-        FileLocation::URL(_) => true,
-    };
     let input_json = serde_json::to_string(&input).unwrap();
-
-    if is_wasm {
-        generate_witness_from_wasm::<F<G1>>(
-            &witness_generator_file,
-            &input_json,
-            &witness_generator_output,
-        )
-    } else {
-        let witness_generator_file = match &witness_generator_file {
-            FileLocation::PathBuf(path) => path,
-            FileLocation::URL(_) => panic!("unreachable"),
-        };
-        generate_witness_from_bin::<F<G1>>(
-            &witness_generator_file,
-            &input_json,
-            &witness_generator_output,
-        )
-    }
+    
+    let witness_generator_file = match &witness_generator_file {
+        FileLocation::PathBuf(path) => path,
+        FileLocation::URL(_) => panic!("URL-based witness generators are not supported without WASM"),
+    };
+    
+    generate_witness_from_bin::<F<G1>>(
+        &witness_generator_file,
+        &input_json,
+        &witness_generator_output,
+    )
 }
 
-#[cfg(target_family = "wasm")]
-async fn compute_witness<G1, G2>(
-    current_public_input: Vec<String>,
-    private_input: HashMap<String, Value>,
-    witness_generator_file: FileLocation,
-) -> Vec<<G1 as Group>::Scalar>
-where
-    G1: Engine<Base = <G2 as Engine>::Scalar> + Group,
-    G2: Engine<Base = <G1 as Engine>::Scalar> + Group,
-{
-    let decimal_stringified_input: Vec<String> = current_public_input
-        .iter()
-        .map(|x| BigInt::from_str_radix(x, 16).unwrap().to_str_radix(10))
-        .collect();
-
-    let input = CircomInput {
-        step_in: decimal_stringified_input.clone(),
-        extra: private_input.clone(),
-    };
-
-    let is_wasm = match &witness_generator_file {
-        FileLocation::PathBuf(path) => path.extension().unwrap_or_default() == "wasm",
-        FileLocation::URL(_) => true,
-    };
-    let input_json = serde_json::to_string(&input).unwrap();
-
-    if is_wasm {
-        generate_witness_from_wasm::<F<G1>>(
-            &witness_generator_file,
-            &input_json,
-        )
-        .await
-    } else {
-        let root = current_dir().unwrap(); // compute path only when generating witness from a binary
-        let witness_generator_output = root.join("circom_witness.wtns");
-        let witness_generator_file = match &witness_generator_file {
-            FileLocation::PathBuf(path) => path,
-            FileLocation::URL(_) => panic!("unreachable"),
-        };
-        generate_witness_from_bin::<F<G1>>(
-            &witness_generator_file,
-            &input_json,
-            &witness_generator_output,
-        )
-    }
-}
-
-#[cfg(not(target_family = "wasm"))]
 pub fn create_recursive_circuit<G1, G2>(
     witness_generator_file: FileLocation,
     r1cs: R1CS<F<G1>>,
@@ -225,77 +159,6 @@ where
     Ok(recursive_snark)
 }
 
-#[cfg(target_family = "wasm")]
-pub async fn create_recursive_circuit<G1, G2>(
-    witness_generator_file: FileLocation,
-    r1cs: R1CS<F<G1>>,
-    private_inputs: Vec<HashMap<String, Value>>,
-    start_public_input: Vec<F<G1>>,
-    pp: &PublicParams<G1, G2, C1<G1>>,
-) -> Result<RecursiveSNARK<G1, G2, C1<G1>>, Box<dyn std::error::Error>>
-where
-    G1: Engine<Base = <G2 as Engine>::Scalar> + Group,
-    G2: Engine<Base = <G1 as Engine>::Scalar> + Group,
-{
-
-    let iteration_count = private_inputs.len();
-
-    let start_public_input_hex = start_public_input
-        .iter()
-        .map(|&x| format!("{:?}", x).strip_prefix("0x").unwrap().to_string())
-        .collect::<Vec<String>>();
-    let mut current_public_input = start_public_input_hex.clone();
-
-    let witness_0 = compute_witness::<G1, G2>(
-        current_public_input.clone(),
-        private_inputs[0].clone(),
-        witness_generator_file.clone(),
-    )
-    .await;
-
-    let circuit_0 = CircomCircuit {
-        r1cs: r1cs.clone(),
-        witness: Some(witness_0),
-    };
-    let circuit_secondary: TrivialCircuit<F<G2>> = TrivialCircuit::default();
-    let z0_secondary = vec![<G2 as Engine>::Scalar::ZERO];
-
-    let mut recursive_snark = RecursiveSNARK::<G1, G2, C1<G1>>::new(
-        &pp,
-        &circuit_0,
-        &start_public_input,
-    )?;
-
-    for i in 0..iteration_count {
-        let witness = compute_witness::<G1, G2>(
-            current_public_input.clone(),
-            private_inputs[i].clone(),
-            witness_generator_file.clone(),
-        )
-        .await;
-
-        let circuit = CircomCircuit {
-            r1cs: r1cs.clone(),
-            witness: Some(witness),
-        };
-
-        let current_public_output = circuit.get_public_outputs();
-        current_public_input = current_public_output
-            .iter()
-            .map(|&x| format!("{:?}", x).strip_prefix("0x").unwrap().to_string())
-            .collect();
-
-        let res = recursive_snark.prove_step(
-            &pp,
-            &circuit,
-        );
-        assert!(res.is_ok());
-    }
-
-    Ok(recursive_snark)
-}
-
-#[cfg(not(target_family = "wasm"))]
 pub fn continue_recursive_circuit<G1, G2>(
     recursive_snark: &mut RecursiveSNARK<G1, G2, C1<G1>>,
     last_zi: Vec<F<G1>>,
@@ -345,65 +208,6 @@ where
             pp,
             &circuit,
         );
-        assert!(res.is_ok());
-    }
-
-    fs::remove_file(witness_generator_output)?;
-
-    Ok(())
-}
-
-#[cfg(target_family = "wasm")]
-pub async fn continue_recursive_circuit<G1, G2>(
-    recursive_snark: &mut RecursiveSNARK<G1, G2, C1<G1>>,
-    last_zi: Vec<F<G1>>,
-    witness_generator_file: FileLocation,
-    r1cs: R1CS<F<G1>>,
-    private_inputs: Vec<HashMap<String, Value>>,
-    start_public_input: Vec<F<G1>>,
-    pp: &PublicParams<G1, G2, C1<G1>>,
-) -> Result<(), Box<dyn std::error::Error>>
-where
-    G1: Engine<Base = <G2 as Engine>::Scalar> + Group,
-    G2: Engine<Base = <G1 as Engine>::Scalar> + Group,
-{
-    let root = current_dir().unwrap();
-    let witness_generator_output = root.join("circom_witness.wtns");
-
-    let iteration_count = private_inputs.len();
-
-    let mut current_public_input = last_zi
-        .iter()
-        .map(|&x| format!("{:?}", x).strip_prefix("0x").unwrap().to_string())
-        .collect::<Vec<String>>();
-
-    let circuit_secondary: TrivialCircuit<F<G2>> = TrivialCircuit::default();
-    let z0_secondary = vec![<G2 as Engine>::Scalar::ZERO];
-
-    for i in 0..iteration_count {
-        let witness = compute_witness::<G1, G2>(
-            current_public_input.clone(),
-            private_inputs[i].clone(),
-            witness_generator_file.clone(),
-        )
-        .await;
-
-        let circuit = CircomCircuit {
-            r1cs: r1cs.clone(),
-            witness: Some(witness),
-        };
-
-        let current_public_output = circuit.get_public_outputs();
-        current_public_input = current_public_output
-            .iter()
-            .map(|&x| format!("{:?}", x).strip_prefix("0x").unwrap().to_string())
-            .collect();
-
-        let res = recursive_snark.prove_step(
-            pp,
-            &circuit,
-        );
-
         assert!(res.is_ok());
     }
 
