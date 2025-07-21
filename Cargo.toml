@@ -14,12 +14,12 @@ keywords = ["zkSNARKs", "cryptography", "proofs"]
 
 [dependencies]
 anyhow = "1.0.65"
-bellperson = { version = "0.25", default-features = false }
+bellperson = { version = "0.26.0", default-features = false }
 byteorder = "1.4.3"
 ff = { version = "0.13", features = ["derive"]}
-hex-literal = "0.3.4"
-itertools = "0.9.0"
-nova-snark = "0.23.0"
+hex-literal = "1.0.0"
+itertools = "0.14.0"
+nova-snark = "0.41.0"
 num-bigint = { version = "0.4", features = ["serde", "rand"] }
 num-traits = "0.2.15"
 pasta_curves = "0.5"
