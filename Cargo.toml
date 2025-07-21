@@ -14,19 +14,16 @@ keywords = ["zkSNARKs", "cryptography", "proofs"]
 
 [dependencies]
 anyhow = "1.0.65"
-<<<<<<< HEAD
 bellpepper-core = { version = "0.4", default-features = false }
 byteorder = "1.4.3"
 ff = { version = "0.13", features = ["derive"]}
 hex-literal = "0.3.4"
 itertools = "0.9.0"
-=======
 bellperson = { version = "0.26.0", default-features = false }
 byteorder = "1.4.3"
 ff = { version = "0.13", features = ["derive"]}
 hex-literal = "1.0.0"
 itertools = "0.14.0"
->>>>>>> 2485d71ba7c6962ae16fb47cbaeb2f51ec19ebc4
 nova-snark = "0.41.0"
 num-bigint = { version = "0.4", features = ["serde", "rand"] }
 num-traits = "0.2.15"
