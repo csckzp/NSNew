@@ -4,8 +4,7 @@
 use crate::circom::circuit::Constraint;
 use byteorder::{LittleEndian, ReadBytesExt};
 use ff::PrimeField;
-use hex_literal::hex;
-use nova_snark::traits::Group;
+use nova_snark::traits::Engine;
 use std::{
     collections::HashMap,
     io::{Error, ErrorKind, Read, Result, Seek, SeekFrom},
@@ -118,10 +117,10 @@ fn read_map<R: Read>(mut reader: R, size: u64, header: &Header) -> Result<Vec<u6
     Ok(vec)
 }
 
-pub fn from_reader<R: Read + Seek, G1, G2>(mut reader: R) -> Result<R1CSFile<<G1 as Group>::Scalar>>
+pub fn from_reader<R: Read + Seek, G1, G2>(mut reader: R) -> Result<R1CSFile<<G1 as Engine>::Scalar>>
 where
-    G1: Group<Base = <G2 as Group>::Scalar>,
-    G2: Group<Base = <G1 as Group>::Scalar>,
+    G1: Engine<Base = <G2 as Engine>::Scalar>,
+    G2: Engine<Base = <G1 as Engine>::Scalar>,
 {
     let mut magic = [0u8; 4];
     reader.read_exact(&mut magic)?;
@@ -176,7 +175,7 @@ where
     reader.seek(SeekFrom::Start(
         *section_offsets.get(&constraint_type).unwrap(),
     ))?;
-    let constraints = read_constraints::<&mut R, <G1 as Group>::Scalar>(
+    let constraints = read_constraints::<&mut R, <G1 as Engine>::Scalar>(
         &mut reader,
         *section_sizes.get(&constraint_type).unwrap(),
         &header,
@@ -258,8 +257,8 @@ mod tests {
     "
         );
 
-        type G1 = pasta_curves::pallas::Point;
-        type G2 = pasta_curves::vesta::Point;
+        type G1 = nova_snark::provider::PallasEngine;
+        type G2 = nova_snark::provider::VestaEngine;
 
         let reader = BufReader::new(Cursor::new(&data[..]));
         let file = from_reader::<_, G1, G2>(reader).unwrap();

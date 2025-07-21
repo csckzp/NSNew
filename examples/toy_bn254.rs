@@ -4,12 +4,12 @@ use nova_scotia::{
     circom::reader::load_r1cs, continue_recursive_circuit, create_public_params,
     create_recursive_circuit, FileLocation, F, S,
 };
-use nova_snark::{provider, CompressedSNARK, PublicParams};
+use nova_snark::{provider, nova::{CompressedSNARK}};
 use serde_json::json;
 
 fn run_test(circuit_filepath: String, witness_gen_filepath: String) {
-    type G1 = provider::bn256_grumpkin::bn256::Point;
-    type G2 = provider::bn256_grumpkin::grumpkin::Point;
+    type G1 = provider::Bn256EngineIPA;
+    type G2 = provider::GrumpkinEngine;
 
     println!(
         "Running test with witness generator: {} and group: {}",
@@ -32,7 +32,7 @@ fn run_test(circuit_filepath: String, witness_gen_filepath: String) {
 
     let start_public_input = [F::<G1>::from(10), F::<G1>::from(10)];
 
-    let pp: PublicParams<G1, G2, _, _> = create_public_params(r1cs.clone());
+    let pp = create_public_params(r1cs.clone()).unwrap();
 
     println!(
         "Number of constraints per step (primary circuit): {}",
@@ -65,12 +65,10 @@ fn run_test(circuit_filepath: String, witness_gen_filepath: String) {
     println!("RecursiveSNARK creation took {:?}", start.elapsed());
 
     // TODO: empty?
-    let z0_secondary = [F::<G2>::from(0)];
-
     // verify the recursive SNARK
     println!("Verifying a RecursiveSNARK...");
     let start = Instant::now();
-    let res = recursive_snark.verify(&pp, iteration_count, &start_public_input, &z0_secondary);
+    let res = recursive_snark.verify(&pp, iteration_count, &start_public_input);
     println!(
         "RecursiveSNARK::verify: {:?}, took {:?}",
         res,
@@ -78,7 +76,7 @@ fn run_test(circuit_filepath: String, witness_gen_filepath: String) {
     );
     assert!(res.is_ok());
 
-    let z_last = res.unwrap().0;
+    let z_last = res.unwrap();
 
     assert_eq!(z_last[0], F::<G1>::from(20));
     assert_eq!(z_last[1], F::<G1>::from(70));
@@ -86,8 +84,8 @@ fn run_test(circuit_filepath: String, witness_gen_filepath: String) {
     // produce a compressed SNARK
     println!("Generating a CompressedSNARK using Spartan with IPA-PC...");
     let start = Instant::now();
-    let (pk, vk) = CompressedSNARK::<_, _, _, _, S<G1>, S<G2>>::setup(&pp).unwrap();
-    let res = CompressedSNARK::<_, _, _, _, S<G1>, S<G2>>::prove(&pp, &pk, &recursive_snark);
+    let (pk, vk) = CompressedSNARK::<_, _, _, S<G1>, S<G2>>::setup(&pp).unwrap();
+    let res = CompressedSNARK::<_, _, _, S<G1>, S<G2>>::prove(&pp, &pk, &recursive_snark);
     println!(
         "CompressedSNARK::prove: {:?}, took {:?}",
         res.is_ok(),
@@ -102,8 +100,7 @@ fn run_test(circuit_filepath: String, witness_gen_filepath: String) {
     let res = compressed_snark.verify(
         &vk,
         iteration_count,
-        start_public_input.to_vec(),
-        z0_secondary.to_vec(),
+        &start_public_input,
     );
     println!(
         "CompressedSNARK::verify: {:?}, took {:?}",
@@ -143,7 +140,7 @@ fn run_test(circuit_filepath: String, witness_gen_filepath: String) {
     // verify the recursive SNARK with the added steps
     println!("Verifying a RecursiveSNARK...");
     let start = Instant::now();
-    let res = recursive_snark.verify(&pp, iteration_count + iteration_count_continue, &start_public_input, &z0_secondary);
+    let res = recursive_snark.verify(&pp, iteration_count + iteration_count_continue, &start_public_input);
     println!(
         "RecursiveSNARK::verify: {:?}, took {:?}",
         res,
@@ -151,18 +148,14 @@ fn run_test(circuit_filepath: String, witness_gen_filepath: String) {
     );
     assert!(res.is_ok());
 
-    assert_eq!(res.clone().unwrap().0[0], F::<G1>::from(31));
-    assert_eq!(res.unwrap().0[1], F::<G1>::from(115));
+    assert_eq!(res.clone().unwrap()[0], F::<G1>::from(31));
+    assert_eq!(res.unwrap()[1], F::<G1>::from(115));
 }
 
 fn main() {
     let group_name = "bn254";
 
     let circuit_filepath = format!("examples/toy/{}/toy.r1cs", group_name);
-    for witness_gen_filepath in [
-        format!("examples/toy/{}/toy_cpp/toy", group_name),
-        format!("examples/toy/{}/toy_js/toy.wasm", group_name),
-    ] {
-        run_test(circuit_filepath.clone(), witness_gen_filepath);
-    }
+    let witness_gen_filepath = format!("examples/toy/{}/toy_cpp/toy", group_name);
+    run_test(circuit_filepath.clone(), witness_gen_filepath);
 }

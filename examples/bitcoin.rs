@@ -9,7 +9,6 @@ use ff::PrimeField;
 use nova_scotia::{
     circom::reader::load_r1cs, create_public_params, create_recursive_circuit, FileLocation, F,
 };
-use nova_snark::traits::Group;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -22,8 +21,8 @@ struct Blocks {
 }
 
 fn bench(iteration_count: usize, per_iteration_count: usize) -> (Duration, Duration) {
-    type G1 = pasta_curves::pallas::Point;
-    type G2 = pasta_curves::vesta::Point;
+    type G1 = nova_snark::provider::PallasEngine;
+    type G2 = nova_snark::provider::VestaEngine;
 
     let root = current_dir().unwrap();
 
@@ -64,7 +63,7 @@ fn bench(iteration_count: usize, per_iteration_count: usize) -> (Duration, Durat
 
     // println!("{:?} {:?}", start_public_input, private_inputs);
 
-    let pp = create_public_params::<G1, G2>(r1cs.clone());
+    let pp = create_public_params::<G1, G2>(r1cs.clone()).unwrap();
 
     println!(
         "Number of constraints per step (primary circuit): {}",
@@ -97,12 +96,10 @@ fn bench(iteration_count: usize, per_iteration_count: usize) -> (Duration, Durat
     let prover_time = start.elapsed();
     println!("RecursiveSNARK creation took {:?}", start.elapsed());
 
-    let z0_secondary = [<G2 as Group>::Scalar::zero()];
-
     // verify the recursive SNARK
     println!("Verifying a RecursiveSNARK...");
     let start = Instant::now();
-    let res = recursive_snark.verify(&pp, iteration_count, &start_public_input, &z0_secondary);
+    let res = recursive_snark.verify(&pp, iteration_count, &start_public_input);
     println!(
         "RecursiveSNARK::verify: {:?}, took {:?}",
         res,

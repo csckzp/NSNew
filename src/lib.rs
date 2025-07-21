@@ -9,7 +9,7 @@ use crate::circom::reader::generate_witness_from_bin;
 use circom::circuit::{CircomCircuit, R1CS};
 use ff::Field;
 use nova_snark::{
-    traits::{circuit::TrivialCircuit, Group, Engine},
+    traits::{circuit::TrivialCircuit, Engine},
     nova::{PublicParams, RecursiveSNARK},
 };
 use num_bigint::BigInt;
@@ -33,8 +33,8 @@ pub enum FileLocation {
 
 pub fn create_public_params<G1, G2>(r1cs: R1CS<F<G1>>) -> Result<PublicParams<G1, G2, C1<G1>>, Box<dyn std::error::Error>>
 where
-    G1: Engine<Base = <G2 as Engine>::Scalar> + Group,
-    G2: Engine<Base = <G1 as Engine>::Scalar> + Group,
+    G1: Engine<Base = <G2 as Engine>::Scalar>,
+    G2: Engine<Base = <G1 as Engine>::Scalar>,
 {
     let circuit_primary = CircomCircuit {
         r1cs,
@@ -60,8 +60,8 @@ fn compute_witness<G1, G2>(
     witness_generator_output: &Path,
 ) -> Vec<<G1 as Engine>::Scalar>
 where
-    G1: Engine<Base = <G2 as Engine>::Scalar> + Group,
-    G2: Engine<Base = <G1 as Engine>::Scalar> + Group,
+    G1: Engine<Base = <G2 as Engine>::Scalar>,
+    G2: Engine<Base = <G1 as Engine>::Scalar>,
 {
     let decimal_stringified_input: Vec<String> = current_public_input
         .iter()
@@ -95,8 +95,8 @@ pub fn create_recursive_circuit<G1, G2>(
     pp: &PublicParams<G1, G2, C1<G1>>,
 ) -> Result<RecursiveSNARK<G1, G2, C1<G1>>, Box<dyn std::error::Error>>
 where
-    G1: Engine<Base = <G2 as Engine>::Scalar> + Group,
-    G2: Engine<Base = <G1 as Engine>::Scalar> + Group,
+    G1: Engine<Base = <G2 as Engine>::Scalar>,
+    G2: Engine<Base = <G1 as Engine>::Scalar>,
 {
     let root = current_dir().unwrap();
     let witness_generator_output = root.join("circom_witness.wtns");
@@ -120,8 +120,8 @@ where
         r1cs: r1cs.clone(),
         witness: Some(witness_0),
     };
-    let circuit_secondary: TrivialCircuit<F<G2>> = TrivialCircuit::default();
-    let z0_secondary = vec![<G2 as Engine>::Scalar::ZERO];
+    let _circuit_secondary: TrivialCircuit<F<G2>> = TrivialCircuit::default();
+    let _z0_secondary = vec![<G2 as Engine>::Scalar::ZERO];
 
     let mut recursive_snark = RecursiveSNARK::<G1, G2, C1<G1>>::new(
         &pp,
@@ -165,12 +165,12 @@ pub fn continue_recursive_circuit<G1, G2>(
     witness_generator_file: FileLocation,
     r1cs: R1CS<F<G1>>,
     private_inputs: Vec<HashMap<String, Value>>,
-    start_public_input: Vec<F<G1>>,
+    _start_public_input: Vec<F<G1>>,
     pp: &PublicParams<G1, G2, C1<G1>>,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    G1: Engine<Base = <G2 as Engine>::Scalar> + Group,
-    G2: Engine<Base = <G1 as Engine>::Scalar> + Group,
+    G1: Engine<Base = <G2 as Engine>::Scalar>,
+    G2: Engine<Base = <G1 as Engine>::Scalar>,
 {
     let root = current_dir().unwrap();
     let witness_generator_output = root.join("circom_witness.wtns");
@@ -182,8 +182,8 @@ where
         .map(|&x| format!("{:?}", x).strip_prefix("0x").unwrap().to_string())
         .collect::<Vec<String>>();
 
-    let circuit_secondary: TrivialCircuit<F<G2>> = TrivialCircuit::default();
-    let z0_secondary = vec![<G2 as Engine>::Scalar::ZERO];
+    let _circuit_secondary: TrivialCircuit<F<G2>> = TrivialCircuit::default();
+    let _z0_secondary = vec![<G2 as Engine>::Scalar::ZERO];
 
     for i in 0..iteration_count {
         let witness = compute_witness::<G1, G2>(
