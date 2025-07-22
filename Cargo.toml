@@ -15,10 +15,6 @@ keywords = ["zkSNARKs", "cryptography", "proofs"]
 [dependencies]
 anyhow = "1.0.65"
 bellpepper-core = { version = "0.4", default-features = false }
-byteorder = "1.4.3"
-ff = { version = "0.13", features = ["derive"]}
-hex-literal = "0.3.4"
-itertools = "0.9.0"
 bellperson = { version = "0.26.0", default-features = false }
 byteorder = "1.4.3"
 ff = { version = "0.13", features = ["derive"]}
